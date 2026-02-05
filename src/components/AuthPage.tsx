@@ -10,6 +10,7 @@ import { Checkbox } from "./ui/checkbox";
 import { Alert, AlertDescription } from "./ui/alert";
 import { Eye, EyeOff, Info } from "lucide-react";
 import sportswaveLogo from "figma:asset/3cd261a4de29af9def91bb4cdb5b0171e98dff81.png";
+import { supabase } from "../lib/supabase";
 
 interface AuthPageProps {
   onLogin: (user: any) => void;
@@ -18,16 +19,16 @@ interface AuthPageProps {
 
 export function AuthPage({ onLogin, onBack }: AuthPageProps) {
   const [showPassword, setShowPassword] = useState(false);
-  const [userType, setUserType] = useState("student");
+  const [userType, setUserType] = useState<"student" | "instructor">("student");
+
   const [formData, setFormData] = useState({
     email: "",
     password: "",
-    name: "",
     confirmPassword: "",
+    name: "",
     agreeToTerms: false,
   });
 
-  // Instructor-specific form data
   const [instructorData, setInstructorData] = useState({
     phone: "",
     yearsExperience: "",
@@ -36,89 +37,111 @@ export function AuthPage({ onLogin, onBack }: AuthPageProps) {
     motivation: "",
   });
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Mock authentication - in real app, this would call an API
-    const mockUser = {
-      id: "1",
-      name: formData.name || "John Doe",
-      email: formData.email,
-      role: userType,
-      avatar: `https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face`,
-    };
-    
-    onLogin(mockUser);
+  const updateFormData = (field: string, value: any) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleSignup = (e: React.FormEvent) => {
+  const updateInstructorData = (field: string, value: any) => {
+    setInstructorData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  // 🔐 LOGIN
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    const { email, password } = formData;
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    onLogin(data.user);
+  };
+
+  // 📝 SIGNUP
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!formData.name.trim()) {
+      alert("Please enter your full name.");
+      return;
+    }
+
     if (formData.password !== formData.confirmPassword) {
       alert("Passwords don't match!");
       return;
     }
-    
+
     if (!formData.agreeToTerms) {
       alert("Please agree to the terms and conditions!");
       return;
     }
 
-    // Additional validation for instructors
-    if (userType === "instructor") {
-      if (!instructorData.phone || !instructorData.yearsExperience || 
-          !instructorData.specialization || !instructorData.qualifications || 
-          !instructorData.motivation) {
-        alert("Please fill in all instructor fields!");
-        return;
-      }
+    if (
+      userType === "instructor" &&
+      (!instructorData.phone ||
+        !instructorData.yearsExperience ||
+        !instructorData.specialization ||
+        !instructorData.qualifications ||
+        !instructorData.motivation)
+    ) {
+      alert("Please fill in all instructor fields!");
+      return;
+    }
+
+    const { email, password } = formData;
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          name: formData.name.trim(),
+          role: userType,
+          ...(userType === "instructor"
+            ? {
+                phone: instructorData.phone,
+                yearsExperience: instructorData.yearsExperience,
+                specialization: instructorData.specialization,
+                qualifications: instructorData.qualifications,
+                motivation: instructorData.motivation,
+              }
+            : {}),
+        },
+      },
+    });
+    
+    if (error) {
+      alert(error.message);
+      return;
     }
     
-    // Mock signup - in real app, this would call an API
-    const mockUser = {
-      id: "1",
-      name: formData.name,
-      email: formData.email,
-      role: userType,
-      avatar: `https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face`,
-      ...(userType === "instructor" && { instructorData }),
-    };
+    // ✅ Try create instructor application (may fail if no session yet — that's OK)
     
-    if (userType === "instructor") {
-      alert("Application submitted successfully! We'll contact you about uploading your CV and supporting documents.");
-    }
     
-    onLogin(mockUser);
-  };
-
-  const updateFormData = (field: string, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const updateInstructorData = (field: string, value: any) => {
-    setInstructorData(prev => ({ ...prev, [field]: value }));
-  };
-
+    alert("Signup successful! Check your email to confirm your account.");
+  }; 
+  
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-2xl w-full">
         {/* Header */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center mb-4">
-            <img 
-              src={sportswaveLogo} 
-              alt="Sportswave Logo" 
-              className="h-8 w-auto mr-3" 
-            />
+            <img src={sportswaveLogo} alt="Sportswave Logo" className="h-8 w-auto mr-3" />
             <div>
               <div className="text-xl font-bold text-foreground">Sportswave</div>
               <div className="text-xs text-muted-foreground -mt-1">CAMPUS</div>
             </div>
           </div>
           <h2 className="text-2xl font-bold text-gray-900">Welcome to Sportswave Campus</h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Join our community of passionate coaches
-          </p>
+          <p className="mt-2 text-sm text-gray-600">Join our community of passionate coaches</p>
         </div>
 
         <Tabs defaultValue="login" className="w-full">
@@ -127,14 +150,12 @@ export function AuthPage({ onLogin, onBack }: AuthPageProps) {
             <TabsTrigger value="signup">Sign Up</TabsTrigger>
           </TabsList>
 
-          {/* Login Form */}
+          {/* Login */}
           <TabsContent value="login">
             <Card>
               <CardHeader>
                 <CardTitle>Login to your account</CardTitle>
-                <CardDescription>
-                  Enter your credentials to access your dashboard
-                </CardDescription>
+                <CardDescription>Enter your credentials to access your dashboard</CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleLogin} className="space-y-4">
@@ -168,55 +189,28 @@ export function AuthPage({ onLogin, onBack }: AuthPageProps) {
                         className="absolute right-0 top-0 h-full px-3"
                         onClick={() => setShowPassword(!showPassword)}
                       >
-                        {showPassword ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </Button>
                     </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <Label>I am a:</Label>
-                    <RadioGroup value={userType} onValueChange={setUserType}>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="student" id="login-student" />
-                        <Label htmlFor="login-student">Student</Label>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <RadioGroupItem value="instructor" id="login-instructor" />
-                        <Label htmlFor="login-instructor">Instructor</Label>
-                      </div>
-                    </RadioGroup>
                   </div>
 
                   <Button type="submit" className="w-full">
                     Login
                   </Button>
-
-                  <div className="text-center">
-                    <Button variant="link" size="sm">
-                      Forgot your password?
-                    </Button>
-                  </div>
                 </form>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Signup Form */}
+          {/* Signup */}
           <TabsContent value="signup">
             <Card>
               <CardHeader>
                 <CardTitle>Create your account</CardTitle>
-                <CardDescription>
-                  Join thousands of coaches improving their skills
-                </CardDescription>
+                <CardDescription>Join thousands of coaches improving their skills</CardDescription>
               </CardHeader>
               <CardContent>
                 <form onSubmit={handleSignup} className="space-y-4">
-                  {/* Basic Information */}
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="signup-name">Full Name *</Label>
@@ -262,11 +256,7 @@ export function AuthPage({ onLogin, onBack }: AuthPageProps) {
                           className="absolute right-0 top-0 h-full px-3"
                           onClick={() => setShowPassword(!showPassword)}
                         >
-                          {showPassword ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
+                          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                         </Button>
                       </div>
                     </div>
@@ -284,9 +274,10 @@ export function AuthPage({ onLogin, onBack }: AuthPageProps) {
                     </div>
                   </div>
 
+                  {/* ✅ ROLE CHOICE (this is what you're missing) */}
                   <div className="space-y-3">
                     <Label>I want to join as:</Label>
-                    <RadioGroup value={userType} onValueChange={setUserType}>
+                    <RadioGroup value={userType} onValueChange={(v) => setUserType(v as any)}>
                       <div className="flex items-center space-x-2">
                         <RadioGroupItem value="student" id="signup-student" />
                         <Label htmlFor="signup-student">Student - Learn from expert coaches</Label>
@@ -298,18 +289,18 @@ export function AuthPage({ onLogin, onBack }: AuthPageProps) {
                     </RadioGroup>
                   </div>
 
-                  {/* Instructor-specific fields */}
+                  {/* Instructor-only fields */}
                   {userType === "instructor" && (
                     <div className="space-y-4 pt-4 border-t">
                       <h3 className="font-medium text-lg">Instructor Information</h3>
-                      
+
                       <div className="grid md:grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label htmlFor="phone">Phone Number *</Label>
                           <Input
                             id="phone"
                             type="tel"
-                            placeholder="+27 123 456 789"
+                            placeholder="+254 7xx xxx xxx"
                             value={instructorData.phone}
                             onChange={(e) => updateInstructorData("phone", e.target.value)}
                             required
@@ -334,7 +325,7 @@ export function AuthPage({ onLogin, onBack }: AuthPageProps) {
                         <Input
                           id="specialization"
                           type="text"
-                          placeholder="e.g., Football, Athletics, Youth Development"
+                          placeholder="e.g., Football, Athletics"
                           value={instructorData.specialization}
                           onChange={(e) => updateInstructorData("specialization", e.target.value)}
                           required
@@ -345,7 +336,7 @@ export function AuthPage({ onLogin, onBack }: AuthPageProps) {
                         <Label htmlFor="qualifications">Qualifications & Certifications *</Label>
                         <Textarea
                           id="qualifications"
-                          placeholder="List your coaching qualifications, certifications, and relevant education..."
+                          placeholder="List your qualifications..."
                           className="min-h-24"
                           value={instructorData.qualifications}
                           onChange={(e) => updateInstructorData("qualifications", e.target.value)}
@@ -357,7 +348,7 @@ export function AuthPage({ onLogin, onBack }: AuthPageProps) {
                         <Label htmlFor="motivation">Why do you want to teach with Sportswave Campus? *</Label>
                         <Textarea
                           id="motivation"
-                          placeholder="Tell us about your motivation to teach and what you hope to achieve..."
+                          placeholder="Tell us your motivation..."
                           className="min-h-24"
                           value={instructorData.motivation}
                           onChange={(e) => updateInstructorData("motivation", e.target.value)}
@@ -368,27 +359,20 @@ export function AuthPage({ onLogin, onBack }: AuthPageProps) {
                       <Alert>
                         <Info className="h-4 w-4" />
                         <AlertDescription>
-                          After submitting this form, we'll contact you about uploading your CV and supporting documents.
+                          After submitting, we’ll contact you about uploading your CV and supporting documents.
                         </AlertDescription>
                       </Alert>
                     </div>
                   )}
 
-                  <div className="flex items-center space-x-2 pt-4">
+                  <div className="flex items-center space-x-2 pt-2">
                     <Checkbox
                       id="terms"
                       checked={formData.agreeToTerms}
                       onCheckedChange={(checked) => updateFormData("agreeToTerms", checked)}
                     />
                     <Label htmlFor="terms" className="text-sm">
-                      I agree to the{" "}
-                      <Button variant="link" size="sm" className="p-0 h-auto">
-                        Terms and Conditions
-                      </Button>{" "}
-                      and{" "}
-                      <Button variant="link" size="sm" className="p-0 h-auto">
-                        Privacy Policy
-                      </Button>
+                      I agree to the Terms and Conditions and Privacy Policy
                     </Label>
                   </div>
 

@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "./lib/supabase";
 import { Header } from "./components/Header";
 import { HomePage } from "./components/HomePage";
 import { CoursesPage } from "./components/CoursesPage";
@@ -13,11 +14,43 @@ import { BlogPage } from "./components/BlogPage";
 import { BlogPostDetail } from "./components/BlogPostDetail";
 import { CreateBlogPost } from "./components/CreateBlogPost";
 import sportswaveLogo from "figma:asset/3cd261a4de29af9def91bb4cdb5b0171e98dff81.png";
+import { AdminDashboard } from "./components/AdminDashboard";
+
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState("home");
   const [user, setUser] = useState(null);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  useEffect(() => {
+    const restoreSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+  
+      if (!session?.user) return;
+  
+      const enrichedUser = await loadUserProfile(session.user);
+  
+      if (!enrichedUser) return;
+  
+      setUser(enrichedUser);
+  
+      if (enrichedUser.role === "instructor") {
+        if (enrichedUser.is_instructor_approved) {
+          setCurrentPage("instructor-dashboard");
+        } else {
+          // not approved yet => keep them student-side (or a “pending approval” page later)
+          setCurrentPage("student-dashboard");
+        }
+      } else {
+        setCurrentPage("student-dashboard");
+      }
+      
+    };
+  
+    restoreSession();
+  }, []);
+  
 
   const handleNavigate = (page: string, courseId?: string) => {
     setCurrentPage(page);
@@ -31,34 +64,124 @@ export default function App() {
       console.log("Navigate to course:", courseId);
     }
   };
-
-  const handleLogin = (userData: any) => {
-    // Add sample profile data for demonstration
-    const enhancedUserData = {
-      ...userData,
-      id: userData.id || `user-${Date.now()}`, // Add user ID for backend authentication
-      access_token: userData.access_token || 'demo-access-token-' + Date.now(), // Demo token for material management
-      name: userData.name || (userData.role === "instructor" ? "Dr. Sarah Okafor" : "Michael Tettey"),
-      email: userData.email || (userData.role === "instructor" ? "sarah.okafor@sportswave.com" : "michael.t@student.com"),
-      phone: userData.phone || "+233 20 123 4567",
-      location: userData.location || "Accra, Ghana",
-      bio: userData.bio || (userData.role === "instructor" 
-        ? "Experienced athletics coach with 12+ years in youth development and performance training."
-        : "Passionate about learning modern coaching techniques and developing young athletes in my community."),
-      avatar: userData.avatar || (userData.role === "instructor" 
-        ? "https://images.unsplash.com/photo-1494790108755-2616b612b786?w=300&h=300&fit=crop&crop=face"
-        : "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=300&h=300&fit=crop&crop=face")
+  const saveUserProfile = async (user: any) => {
+    if (!user?.id) return;
+  
+    // 🔒 Never overwrite existing values with empty ones
+    const payload: any = {
+      id: user.id,
+      email: user.email,
+      updated_at: new Date().toISOString(),
     };
-    
-    setUser(enhancedUserData);
-    // Redirect to appropriate dashboard based on role
-    if (enhancedUserData.role === "instructor") {
-      setCurrentPage("instructor-dashboard");
-    } else {
-      setCurrentPage("student-dashboard");
+  
+    if (user.name) payload.name = user.name;
+    if (user.role) payload.role = user.role;
+  
+    const { error } = await supabase.from("profiles").upsert(payload);
+  
+    if (error) {
+      console.error("Profile save error:", error.message);
     }
   };
+  
+  const loadUserProfile = async (authUser: any) => {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", authUser.id)
+      .single();
+  
+    if (error) {
+      console.error("Profile load error:", error.message);
+      return null;
+    }
+  
+    return {
+      ...authUser,
+      ...data,
+    };
+  };
+  const ensureInstructorApplication = async (user: any) => {
+    if (!user?.id) return;
+  
+    // Only for people who chose instructor role
+    if (user.role !== "instructor") return;
+  
+    // If already approved, no need to apply
+    if (user.is_instructor_approved) return;
+  
+    // Check if application already exists
+    const { data: existing, error: checkError } = await supabase
+      .from("instructor_applications")
+      .select("id,status")
+      .eq("user_id", user.id)
+      .maybeSingle();
+  
+    if (checkError) {
+      console.warn("Application check failed:", checkError.message);
+      return;
+    }
+  
+    // If exists, don't duplicate
+    if (existing?.id) return;
+  
+    // Insert a new pending application (pulls extra details from metadata if present)
+    const { error: insertError } = await supabase.from("instructor_applications").insert({
+      user_id: user.id,
+      full_name: user.name || "",
+      email: user.email || "",
+      phone: user.user_metadata?.phone || null,
+      years_experience: user.user_metadata?.yearsExperience || null,
+      specialization: user.user_metadata?.specialization || null,
+      qualifications: user.user_metadata?.qualifications || null,
+      motivation: user.user_metadata?.motivation || null,
+      status: "pending",
+    });
+  
+    if (insertError) {
+      console.warn("Application insert failed:", insertError.message);
+    }
+  };
+  
+  const handleLogin = async (authUser: any) => {
+    // 1️⃣ Load existing profile FIRST
+    const existingProfile = await loadUserProfile(authUser);
+  
+    // 2️⃣ Determine name SAFELY
+    const resolvedName =
+      existingProfile?.name ||
+      authUser.user_metadata?.name ||
+      authUser.user_metadata?.full_name ||
+      authUser.email?.split("@")[0] ||
+      "User";
+  
+    const normalizedUser = {
+      id: authUser.id,
+      email: authUser.email,
+      role: existingProfile?.role || "student",
+      name: resolvedName,
+    };
+  
+    // 3️⃣ Save ONLY if profile is missing or incomplete
+    await saveUserProfile(normalizedUser);
+  
+    // 4️⃣ Reload from DB (single source of truth)
+    const enrichedUser = await loadUserProfile(authUser);
+  
+    if (!enrichedUser) return;
+  
+    setUser(enrichedUser);
+    await ensureInstructorApplication(enrichedUser);
 
+  
+    setCurrentPage(
+      enrichedUser.role === "instructor"
+        ? "instructor-dashboard"
+        : "student-dashboard"
+    );
+  };
+  
+  
   const handleLogout = () => {
     setUser(null);
     setCurrentPage("home");
@@ -70,6 +193,8 @@ export default function App() {
 
   const renderPage = () => {
     switch (currentPage) {
+      case "admin":
+        return <AdminDashboard />;
       case "home":
         return <HomePage onNavigate={handleNavigate} />;
       case "about":

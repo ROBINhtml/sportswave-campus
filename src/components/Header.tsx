@@ -64,13 +64,27 @@ export function Header({ currentPage, onNavigate, user, onLogin, onLogout, isTra
           <div className="hidden md:flex items-center space-x-4">
             {user ? (
               <div className="flex items-center space-x-3">
-                <UserProfileDropdown 
-                  user={user} 
-                  onNavigate={onNavigate} 
-                  onLogout={onLogout} 
-                  isTransparent={isTransparent}
-                />
-              </div>
+
+              {/* 🔐 ADMIN BUTTON */}
+              {user?.email === "robinnjoka3@gmail.com" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onNavigate("admin")}
+                  className="bg-white text-primary hover:bg-white/90"
+                >
+                  Admin
+                </Button>
+              )}
+            
+              <UserProfileDropdown 
+                user={user} 
+                onNavigate={onNavigate} 
+                onLogout={onLogout} 
+                isTransparent={isTransparent}
+              />
+            </div>
+            
             ) : (
               <Button 
                 size="sm" 
@@ -130,18 +144,36 @@ export function Header({ currentPage, onNavigate, user, onLogin, onLogout, isTra
               <div className="pt-2 border-t border-white/20 mt-2">
                 {user ? (
                   <div className="space-y-1">
-                    <div className="flex items-center space-x-3 px-3 py-2 mb-2">
-                      <UserProfileDropdown 
-                        user={user} 
-                        onNavigate={onNavigate} 
-                        onLogout={onLogout} 
-                        isTransparent={isTransparent}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-white truncate">{user?.name || "User"}</p>
-                        <p className="text-xs text-white/70 truncate">{user?.email || "user@example.com"}</p>
-                      </div>
-                    </div>
+                   <div className="space-y-2 px-3 py-2 mb-2">
+
+{/* 🔐 ADMIN BUTTON (MOBILE) */}
+{user?.email === "robinnjoka3@gmail.com" && (
+  <Button
+    size="sm"
+    className="w-full bg-white text-primary hover:bg-white/90"
+    onClick={() => {
+      onNavigate("admin");
+      setIsMobileMenuOpen(false);
+    }}
+  >
+    Admin Panel
+  </Button>
+)}
+
+<div className="flex items-center space-x-3">
+  <UserProfileDropdown 
+    user={user} 
+    onNavigate={onNavigate} 
+    onLogout={onLogout} 
+    isTransparent={isTransparent}
+  />
+  <div className="flex-1 min-w-0">
+    <p className="text-sm font-medium text-white truncate">{user?.name || "User"}</p>
+    <p className="text-xs text-white/70 truncate">{user?.email || "user@example.com"}</p>
+  </div>
+</div>
+</div>
+
                   </div>
                 ) : (
                   <Button

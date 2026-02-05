@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "./ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { 
@@ -36,15 +36,32 @@ interface UserProfileDropdownProps {
   isTransparent?: boolean;
 }
 
-export function UserProfileDropdown({ user, onNavigate, onLogout, isTransparent = false }: UserProfileDropdownProps) {
+export function UserProfileDropdown({
+  user,
+  onNavigate,
+  onLogout,
+  isTransparent = false,
+}: UserProfileDropdownProps) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+
   const [editedUser, setEditedUser] = useState({
-    name: user?.name || "John Doe",
-    email: user?.email || "john@example.com",
-    phone: user?.phone || "+233 20 123 4567",
-    location: user?.location || "Accra, Ghana",
-    bio: user?.bio || "Passionate coach dedicated to developing young talent in African sports."
+    name: "",
+    email: "",
+    phone: "",
+    location: "",
+    bio: "",
   });
+  useEffect(() => {
+    if (user) {
+      setEditedUser({
+        name: user.name || "",
+        email: user.email || "",
+        phone: user.phone || "",
+        location: user.location || "",
+        bio: user.bio || "",
+      });
+    }
+  }, [user]);
 
   const getInitials = (name: string) => {
     return name
